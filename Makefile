@@ -12,3 +12,6 @@ main.o:  main.c cache.h
 
 cache.o:  cache.c cache.h
 	$(CC) $(CFLAGS) -c cache.c
+
+clean:
+	rm -f sim *.o

@@ -13,9 +13,7 @@
 static FILE *traceFile;
 
 
-int main(argc, argv)
-  int argc;
-  char **argv;
+int main(int argc, char** argv)
 {
   parse_args(argc, argv);
   init_cache();
@@ -25,9 +23,7 @@ int main(argc, argv)
 
 
 /************************************************************/
-void parse_args(argc, argv)
-  int argc;
-  char **argv;
+void parse_args(int argc, char** argv)
 {
   int arg_index, i, value;
 
@@ -131,8 +127,7 @@ void parse_args(argc, argv)
 /************************************************************/
 
 /************************************************************/
-void play_trace(inFile)
-  FILE *inFile;
+void play_trace(FILE* inFile)
 {
   unsigned addr, data, access_type;
   int num_inst;
@@ -161,9 +156,7 @@ void play_trace(inFile)
 /************************************************************/
 
 /************************************************************/
-int read_trace_element(inFile, access_type, addr)
-  FILE *inFile;
-  unsigned *access_type, *addr;
+int read_trace_element(FILE* inFile, unsigned* access_type, unsigned* addr)
 {
   int result;
   char c;

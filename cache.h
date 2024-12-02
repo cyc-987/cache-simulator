@@ -3,6 +3,9 @@
  * cache.h
  */
 
+#ifndef __CACHE_H__
+#define __CACHE_H__
+
 
 #define TRUE 1
 #define FALSE 0
@@ -59,15 +62,17 @@ typedef struct cache_stat_ {
 
 
 /* function prototypes */
-void set_cache_param();
+void set_cache_param(int param, int value);
 void init_cache();
-void perform_access();
+void perform_access(unsigned addr, unsigned access_type);
 void flush();
-void delete();
-void insert();
+void delete(Pcache_line* head, Pcache_line* tail, Pcache_line item);
+void insert(Pcache_line* head, Pcache_line* tail, Pcache_line item);
 void dump_settings();
 void print_stats();
 
 
 /* macros */
 #define LOG2(x) ((int) rint((log((double) (x))) / (log(2.0))))
+
+#endif

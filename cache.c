@@ -30,9 +30,7 @@ static cache_stat cache_stat_inst;
 static cache_stat cache_stat_data;
 
 /************************************************************/
-void set_cache_param(param, value)
-  int param;
-  int value;
+void set_cache_param(int param, int value)
 {
 
   switch (param) {
@@ -85,8 +83,7 @@ void init_cache()
 /************************************************************/
 
 /************************************************************/
-void perform_access(addr, access_type)
-  unsigned addr, access_type;
+void perform_access(unsigned addr, unsigned access_type)
 {
 
   /* handle an access to the cache */
@@ -104,9 +101,7 @@ void flush()
 /************************************************************/
 
 /************************************************************/
-void delete(head, tail, item)
-  Pcache_line *head, *tail;
-  Pcache_line item;
+void delete(Pcache_line* head, Pcache_line* tail, Pcache_line item)
 {
   if (item->LRU_prev) {
     item->LRU_prev->LRU_next = item->LRU_next;
@@ -126,9 +121,7 @@ void delete(head, tail, item)
 
 /************************************************************/
 /* inserts at the head of the list */
-void insert(head, tail, item)
-  Pcache_line *head, *tail;
-  Pcache_line item;
+void insert(Pcache_line* head, Pcache_line* tail, Pcache_line item)
 {
   item->LRU_next = *head;
   item->LRU_prev = (Pcache_line)NULL;
