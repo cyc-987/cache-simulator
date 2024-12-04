@@ -9,6 +9,7 @@
 
 #include "cache.h"
 #include "main.h"
+#include "cache_utils.h"
 
 /* cache configuration parameters */
 static int cache_split = 0;
@@ -79,6 +80,16 @@ void init_cache()
 
   /* initialize the cache, and cache statistics data structures */
 
+  //direct mapped cache, use c1
+  c1.size = cache_usize;
+  c1.associativity = 1; //direct mapped
+  c1.n_sets = c1.size / (cache_block_size * c1.associativity);
+  c1.index_mask_offset = LOG2(cache_block_size);
+  c1.index_mask = (c1.n_sets - 1) << c1.index_mask_offset;
+
+  c1.LRU_head = (Pcache_line *)malloc(c1.n_sets * sizeof(Pcache_line));
+  initCacheLines(c1.LRU_head, c1.n_sets);
+
 }
 /************************************************************/
 
@@ -88,6 +99,85 @@ void perform_access(unsigned addr, unsigned access_type)
 
   /* handle an access to the cache */
 
+  // get index and tag from addr
+  unsigned index = (addr & c1.index_mask) >> c1.index_mask_offset;
+  unsigned tag = addr >> (LOG2(cache_block_size) + LOG2(c1.n_sets));
+
+  Pcache Pcache_selected;
+  Pcache_stat Pcache_stat_selected;
+
+  if(access_type == TRACE_DATA_LOAD || access_type == TRACE_INST_LOAD)
+  {// load
+  
+    //select right cache and status    
+    if(access_type == TRACE_DATA_LOAD){
+      Pcache_selected = &c1;
+      Pcache_stat_selected = &cache_stat_data;
+    }else{
+      Pcache_selected = &c2;
+      Pcache_stat_selected = &cache_stat_inst;
+    }
+    if(cache_split == FALSE){
+      Pcache_selected = &c1; //unified cache is default to c1
+    }
+
+    int hit = ifHit(Pcache_selected, index, tag);//check if hit
+
+    if(hit){//hit
+      
+    }else{//not hit
+      //check if new
+      int new = ifNew(Pcache_selected, index, tag);
+      Pcache_stat_selected->demand_fetches += words_per_block; 
+      Pcache_stat_selected->misses++;
+      if(new){//new
+        updateCacheNew(Pcache_selected, index, tag);
+      }else{//the block has been used
+        int copyback = updateCacheUsed(Pcache_selected, index, tag);
+        if(copyback){Pcache_stat_selected->copies_back += words_per_block;}
+        Pcache_stat_selected->replacements++;
+      }
+    }
+
+    Pcache_stat_selected->accesses++;
+
+  }else if(access_type == TRACE_DATA_STORE)
+  {// store
+    Pcache_selected = &c1;
+    Pcache_stat_selected = &cache_stat_data;
+
+    int hit = ifHit(Pcache_selected, index, tag);//check if hit
+
+    if(hit){//hit
+      //set dirty bit
+      writeCacheLocal(Pcache_selected, index, tag);
+    }else{//miss
+      Pcache_stat_selected->misses++;
+      if(cache_writealloc){//write allocate
+
+        //check if new
+        int new = ifNew(Pcache_selected, index, tag);
+        Pcache_stat_selected->demand_fetches += words_per_block; 
+        if(new){//new
+          updateCacheNew(Pcache_selected, index, tag);
+        }else{//the block has been used
+          int copyback = updateCacheUsed(Pcache_selected, index, tag);
+          if(copyback){Pcache_stat_selected->copies_back += words_per_block;}
+          Pcache_stat_selected->replacements++;
+        }
+        writeCacheLocal(Pcache_selected, index, tag);
+
+      }else{//not write allocate, direct write to mem
+        Pcache_stat_selected->copies_back += words_per_block;
+      }
+    }
+    Pcache_stat_selected->accesses++;
+
+  }else{
+    printf("error perform_access: bad access type\n");
+    exit(-1);
+  }
+
 }
 /************************************************************/
 
@@ -96,6 +186,8 @@ void flush()
 {
 
   /* flush the cache */
+  int copyback = flushCacheLines(c1.LRU_head, c1.n_sets);
+  cache_stat_data.copies_back += copyback*words_per_block;
 
 }
 /************************************************************/
