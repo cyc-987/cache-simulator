@@ -80,15 +80,42 @@ void init_cache()
 
   /* initialize the cache, and cache statistics data structures */
 
-  //direct mapped cache, use c1
-  c1.size = cache_usize;
-  c1.associativity = 1; //direct mapped
+  //unifined cache
+  if(cache_split){
+    c1.size = cache_dsize;
+
+    c2.size = cache_isize;
+    c2.associativity = cache_assoc; 
+    c2.n_sets = c2.size / (cache_block_size * c2.associativity);
+    c2.index_mask_offset = LOG2(cache_block_size);
+    c2.index_mask = (c2.n_sets - 1) << c2.index_mask_offset;
+
+    c2.LRU_head = (Pcache_line *)malloc(c2.n_sets * sizeof(Pcache_line));
+    c2.LRU_tail = (Pcache_line *)malloc(c2.n_sets * sizeof(Pcache_line));
+
+    c2.contents = c2.n_sets;
+    c2.set_contents = (int*)malloc(c2.n_sets * sizeof(int));
+    for(int i=0;i<c2.n_sets;i++){c2.set_contents[i] = c2.associativity;}
+
+    initCacheLines(c2.LRU_head, c2.n_sets, c2.associativity);
+    initCacheLines(c2.LRU_tail, c2.n_sets, c2.associativity);
+  }else{
+    c1.size = cache_usize;
+  }
+  c1.associativity = cache_assoc; 
   c1.n_sets = c1.size / (cache_block_size * c1.associativity);
   c1.index_mask_offset = LOG2(cache_block_size);
   c1.index_mask = (c1.n_sets - 1) << c1.index_mask_offset;
 
   c1.LRU_head = (Pcache_line *)malloc(c1.n_sets * sizeof(Pcache_line));
-  initCacheLines(c1.LRU_head, c1.n_sets);
+  c1.LRU_tail = (Pcache_line *)malloc(c1.n_sets * sizeof(Pcache_line));
+
+  c1.contents = c1.n_sets;
+  c1.set_contents = (int*)malloc(c1.n_sets * sizeof(int));
+  for(int i=0;i<c1.n_sets;i++){c1.set_contents[i] = c1.associativity;}
+
+  initCacheLines(c1.LRU_head, c1.n_sets, c1.associativity);
+  initCacheLines(c1.LRU_tail, c1.n_sets, c1.associativity);
 
 }
 /************************************************************/
@@ -121,15 +148,21 @@ void perform_access(unsigned addr, unsigned access_type)
       Pcache_selected = &c1; //unified cache is default to c1
     }
 
+    index = (addr & Pcache_selected->index_mask) >> Pcache_selected->index_mask_offset;
+    tag = addr >> (LOG2(cache_block_size) + LOG2(Pcache_selected->n_sets));
+
     int hit = ifHit(Pcache_selected, index, tag);//check if hit
 
     if(hit){//hit
-      
+      updateLRU(Pcache_selected, index, tag);//move the hitted one to the front of the list
     }else{//not hit
+
       //check if new
       int new = ifNew(Pcache_selected, index, tag);
+
       Pcache_stat_selected->demand_fetches += words_per_block; 
       Pcache_stat_selected->misses++;
+
       if(new){//new
         updateCacheNew(Pcache_selected, index, tag);
       }else{//the block has been used
@@ -146,15 +179,24 @@ void perform_access(unsigned addr, unsigned access_type)
     Pcache_selected = &c1;
     Pcache_stat_selected = &cache_stat_data;
 
+    index = (addr & Pcache_selected->index_mask) >> Pcache_selected->index_mask_offset;
+    tag = addr >> (LOG2(cache_block_size) + LOG2(Pcache_selected->n_sets));
+
     int hit = ifHit(Pcache_selected, index, tag);//check if hit
 
     if(hit){//hit
-      //set dirty bit
-      writeCacheLocal(Pcache_selected, index, tag);
+      if(cache_writeback){
+        //set dirty bit
+        writeCacheLocal(Pcache_selected, index, tag);
+        updateLRU(Pcache_selected, index, tag);
+      }else{
+        updateLRU(Pcache_selected, index, tag);
+        Pcache_stat_selected->copies_back += 1;
+      }
     }else{//miss
       Pcache_stat_selected->misses++;
       if(cache_writealloc){//write allocate
-
+        //fetch
         //check if new
         int new = ifNew(Pcache_selected, index, tag);
         Pcache_stat_selected->demand_fetches += words_per_block; 
@@ -165,10 +207,16 @@ void perform_access(unsigned addr, unsigned access_type)
           if(copyback){Pcache_stat_selected->copies_back += words_per_block;}
           Pcache_stat_selected->replacements++;
         }
-        writeCacheLocal(Pcache_selected, index, tag);
+        if(cache_writeback){//treated as hit
+          writeCacheLocal(Pcache_selected, index, tag);
+          updateLRU(Pcache_selected, index, tag);
+        }else{
+          updateLRU(Pcache_selected, index, tag);
+          Pcache_stat_selected->copies_back += 1;
+        }
 
       }else{//not write allocate, direct write to mem
-        Pcache_stat_selected->copies_back += words_per_block;
+        Pcache_stat_selected->copies_back += 1;
       }
     }
     Pcache_stat_selected->accesses++;
@@ -186,7 +234,8 @@ void flush()
 {
 
   /* flush the cache */
-  int copyback = flushCacheLines(c1.LRU_head, c1.n_sets);
+  int copyback = flushCacheLines(c1.LRU_head, c1.n_sets, c1.associativity);
+  if(cache_split){copyback += flushCacheLines(c2.LRU_head, c2.n_sets, c2.associativity);}
   cache_stat_data.copies_back += copyback*words_per_block;
 
 }
