@@ -2,7 +2,7 @@ import subprocess
 import pandas as pd
 
 sim_path = "./sim"
-trace_path = "../ext_traces/spice.trace"
+trace_path = "./ext_traces/spice.trace"
 
 def run_test(case):
     if case["I-D"] == "Split":
